@@ -12,6 +12,7 @@
 
 @interface ViewController () <UICollectionViewDataSource, UICollectionViewDelegate>
 
+@property (nonatomic) NSCache *photoCache;
 @property (nonatomic) NSMutableArray *photos;
 @property (weak, nonatomic) IBOutlet UICollectionView *myCollectionView;
 
@@ -22,6 +23,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
+    self.photoCache = [[NSCache alloc] init];
     self.photos = [[NSMutableArray alloc] init];
     [self makeNetworkRequest];
 }
@@ -82,24 +84,38 @@
     
     NSURLSession *session = [NSURLSession sharedSession];
     
-    photoCell.downloadTask = [session downloadTaskWithURL:photo.url completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        
-        if(error) {
-            NSLog(@"error: %@", error.localizedDescription);
-            return;
-        }
-        
-        NSData *data = [NSData dataWithContentsOfURL:location];
-        UIImage *image = [UIImage imageWithData:data];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            //This will run on main queue
-            photoCell.photoView.image = image;
-        });
-        
-    }];
+    NSString *urlString = photo.url.absoluteString;
     
-    [photoCell.downloadTask resume];
+    //Checks if photo has already been cached in photoCache
+    if([self.photoCache objectForKey:urlString]) {
+        UIImage *cachedImage = [self.photoCache objectForKey:urlString];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            photoCell.photoView.image = cachedImage;
+        });
+    } else {
+    
+        photoCell.downloadTask = [session downloadTaskWithURL:photo.url completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            
+            if(error) {
+                NSLog(@"error: %@", error.localizedDescription);
+                return;
+            }
+            
+            NSData *data = [NSData dataWithContentsOfURL:location];
+            UIImage *image = [UIImage imageWithData:data];
+            
+            //Adds UIImage to photoCache with urlString as key
+            [self.photoCache setObject:image forKey:urlString];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                //This will run on main queue
+                photoCell.photoView.image = image;
+            });
+            
+        }];
+        
+        [photoCell.downloadTask resume];
+    }
     
     return photoCell;
 }
